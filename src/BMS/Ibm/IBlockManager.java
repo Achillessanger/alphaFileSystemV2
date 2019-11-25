@@ -13,6 +13,5 @@ public interface IBlockManager extends Remote {
 
     MessageBlk readBlock(Id indexId) throws RemoteException;
     ACK writeBlock(MessageBlk message) throws RemoteException;
-    ACK isBlockChanged(MessageCheck checkFromClient) throws RemoteException;
-    long getBlockSize() throws RemoteException;
+
 }

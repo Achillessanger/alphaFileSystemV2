@@ -20,7 +20,6 @@ public class MyFile implements File{
     private String fmName;
     private FileManager fileManager;
     ArrayList<Map<Id, Id>> LogicBlockList;
-    ArrayList<Block> usingBlocks = new ArrayList<>();
     private Id fileId;
     private long cursor = 0;
     public MyFile(Id id,FileManager fileManager, String fmName, long fileSize, long blockSize, ArrayList<Map<Id, Id>> list){
@@ -191,16 +190,6 @@ public class MyFile implements File{
         return 0;
     }
     public void close(){
-//        for(Block block:usingBlocks){
-//            int blkId = Integer.parseInt(((StringId) block.getIndexId()).getId());
-//            BufferBlk bufferBlk = Buffer.findBufBlk(blkId);
-//            if(bufferBlk != null && bufferBlk.isDelay()){
-//                //写回
-//                Buffer.writeBlk2file(bufferBlk);
-//                bufferBlk.setDelay(false);
-//            }
-//        }
-//        usingBlocks.clear();
     }
     public long size(){
         return fileSize;
@@ -348,7 +337,6 @@ public class MyFile implements File{
     }
     private Block writeBlock(MyBlockManagerClient bmc, byte[] b){
         Block newBlock = bmc.newBlock(b);
-        usingBlocks.add(newBlock);
         return newBlock;
     }
 

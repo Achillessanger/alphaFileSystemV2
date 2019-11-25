@@ -13,7 +13,6 @@ public class Buffer {
     public static final int BUFFER_LINES = 4;
     private ArrayList<ArrayList<BufferBlk>> cache;
     private BufferBlk freeHead;
-    private ArrayList<BufferBlk> delyBufBlks;
 
     Buffer(){
         freeHead = new BufferBlk();
@@ -32,19 +31,10 @@ public class Buffer {
                 tmp = bufferBlk;
             }
         }
-        delyBufBlks = new ArrayList<>();
     }
 
     public ArrayList<ArrayList<BufferBlk>> getCache() {
         return cache;
-    }
-
-    public BufferBlk getFreeHead() {
-        return freeHead;
-    }
-
-    public ArrayList<BufferBlk> getDelyBufBlks() {
-        return delyBufBlks;
     }
 
     public void makeBusy(BufferBlk tmpBlk, int bufIndex){
@@ -80,37 +70,8 @@ public class Buffer {
     }
     public BufferBlk findFreeBlk(){
         BufferBlk tmpBlk = freeHead.getNextFreeBufBlk();
-        BufferBlk newBlk = null;
-        while (tmpBlk != null){
-            if(tmpBlk.isDelay()){
-                if(delyBufBlks.contains(tmpBlk))
-                    delyBufBlks.add(tmpBlk);
-            }else {
-                newBlk = tmpBlk;
-                break;
-            }
-            tmpBlk = tmpBlk.getNextFreeBufBlk();
-        }
-        return newBlk;
+        return tmpBlk;
     }
 
 
-    public void delayWriteFin(BufferBlk blk){
-        blk.setDelay(false);
-        delyBufBlks.remove(blk);
-    }
-
-    public BufferBlk findBufBlk(int blkId){
-        int bufIndex = blkId % BUFFER_LINES;
-        //在cache里找
-        for(int i = 0; i < cache.get(bufIndex).size(); i++){
-            //！注意这里没有讨论块忙的情况!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            if(Integer.parseInt(cache.get(bufIndex).get(i).getBufBlkId().getId()) == blkId
-                    && !cache.get(bufIndex).get(i).isBusy()){
-//                BMS.Buffer.cache.get(bufIndex).get(i).setBusy(true);
-                return cache.get(bufIndex).get(i);
-            }
-        }
-        return null;
-    }
 }

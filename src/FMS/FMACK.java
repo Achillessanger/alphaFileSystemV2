@@ -1,6 +1,8 @@
 package FMS;
 
-public class FMACK {
+import java.io.Serializable;
+
+public class FMACK implements Serializable {
     private int isValid;
     private int errorCode;
     public FMACK(int errorCode){

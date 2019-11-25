@@ -30,17 +30,17 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
     }
 
     @Override
-    public Message getFileMeta(Id fileId) throws RemoteException {
+    public Message getFileMeta(Id fileId) throws RemoteException {//OK
         long fileNameHash = fmBuffer.inodeHash(fileId);
         int bufFMIndex = (int)fileNameHash % BufferFMS.FM_BUFFER_LINES;
 
         //在inode的buffer里找
         for(int i = 0; i < fmBuffer.getInode_cache().get(bufFMIndex).size(); i++){
             BufferInode inode = fmBuffer.getInode_cache().get(bufFMIndex).get(i);
-            if(inode.equals(fileId))
+            if(inode.getInodesId().equals(fileId))
                 return new Message(inode.getInode_data(),1,inode.getFileSize(),inode.getBlockSize());
         }
-        //inode的buffer里没找到，从磁盘读取
+        //inode在buffer里没找到，从磁盘读取
         BufferInode newInode = fmBuffer.findFreeInode();
         fmBuffer.deleteFromCache(newInode);
         fmBuffer.change_place_on_free_list(newInode);
@@ -53,18 +53,16 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
             return new Message(0,ErrorCode.NO_SUCH_FILE);
         }else {
             try {
-                BufferedReader br = new BufferedReader(new FileReader(file));
-                String tmp;
-                tmp = br.readLine();
+                RandomAccessFile raf = new RandomAccessFile(file,"r");
+                raf.seek(0);
+                String tmp = raf.readLine();
                 long fileSize = Long.parseLong(tmp.split(":")[1]);
-                tmp = br.readLine();
+                tmp = raf.readLine();
                 long blockSize = Long.parseLong(tmp.split(":")[1]);
-                br.readLine();
-                tmp = br.readLine();
+                raf.readLine();
+                tmp = raf.readLine();
                 ArrayList<Map<Id,Id>> LogicBlockList = new ArrayList<>();
-
                 while (tmp != null && !"".equals(tmp)){
-                    boolean debug = "".equals(tmp);
                     Map<Id,Id> map = new HashMap<>();
                     if(tmp.split(":").length == 1){
                         map = mContext.fileEmpytMap;
@@ -78,10 +76,11 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
                         }
                     }
                     LogicBlockList.add(map);
-                    tmp = br.readLine();
+                    tmp = raf.readLine();
                 }
 
-                //读入buffer
+                /*磁盘读取成功
+                  读入buffer*/
                 newInode.setInodesId(sid);
                 newInode.setInode_data(LogicBlockList);
                 newInode.setFileSize(fileSize);
@@ -96,7 +95,7 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
     }
 
     @Override
-    public FMACK updateFileMeta(Message newMeta, Id fileId) throws RemoteException {
+    public FMACK updateFileMeta(Message newMeta, Id fileId) throws RemoteException {//OK
         ArrayList<Map<Id,Id>> LogicBlockList = newMeta.getLogicBlockList();
         long fileSize = newMeta.getFileSize();
         long blockSize = newMeta.getBlockSize();
@@ -109,26 +108,26 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
         //在inode的buffer里找
         for(int i = 0; i < fmBuffer.getInode_cache().get(bufFMIndex).size(); i++){
             BufferInode bufferInode = fmBuffer.getInode_cache().get(bufFMIndex).get(i);
-            if(bufferInode.equals(fileId)) {
+            if(bufferInode.getInodesId().equals(fileId)) {
                 inode = bufferInode;
                 break;
             }
         }
-        fmBuffer.change_place_on_free_list(inode);
-        //TODO 记录事务
+
+        /*选好缓冲块
+          先把meta写入磁盘，再写入buffer
+          这个顺序是为了一致性*/
         ArrayList<Map<Id,Id>> LogicBlockList_record = inode.getInode_data();
         StringId inodesId_record = inode.getInodesId();
         long fileSize_record = inode.getFileSize();
         long blockSize_record = inode.getBlockSize();
 
-        inode.setInode_data(LogicBlockList);
-        inode.setBlockSize(blockSize);
-        inode.setFileSize(fileSize);
-        inode.setInodesId((StringId) fileId);
-
         String file_meta_path = path + ((StringId)fileId).getId() + ".meta";
         java.io.File file_meta_file = new java.io.File(file_meta_path);
+        if(!file_meta_file.exists())
+            return new FMACK(ErrorCode.INITFILE_ERROR);
         file_meta_file.delete();
+
         try {
             file_meta_file.createNewFile();
             RandomAccessFile raf = new RandomAccessFile(file_meta_file,"rw");
@@ -148,18 +147,24 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
             raf.write(str.getBytes());
             raf.close();
         }catch (IOException e){
-            //这个情况感觉……救不了啊
             inode.setInode_data(LogicBlockList_record);
             inode.setInodesId(inodesId_record);
             inode.setFileSize(fileSize_record);
             inode.setBlockSize(blockSize_record);
             return new FMACK(ErrorCode.IO_EXCEPTION);
         }
+        //inode在磁盘上写入完成，写入buffer
+        fmBuffer.change_place_on_free_list(inode);
+        inode.setInode_data(LogicBlockList);
+        inode.setBlockSize(blockSize);
+        inode.setFileSize(fileSize);
+        inode.setInodesId((StringId) fileId);
+
         return new FMACK();
     }
 
     @Override
-    public Message newFileMeta(Id fileId) throws RemoteException {
+    public Message newFileMeta(Id fileId) throws RemoteException { //OK
         String filePath = path + ((StringId)fileId).getId() + ".meta";
         java.io.File newFile = new java.io.File(filePath);
         if(newFile.exists())
@@ -176,7 +181,7 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
         long blockSize_record = newInode.getBlockSize();
 
         //写入buffer
-        newInode.setInode_data(new ArrayList<>());
+        newInode.setInode_data(new ArrayList<Map<Id,Id>>());
         newInode.setInodesId((StringId)fileId);
         newInode.setFileSize(0);
         newInode.setBlockSize(BLOCK_SIZE);

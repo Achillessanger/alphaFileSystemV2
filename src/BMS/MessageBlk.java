@@ -8,18 +8,19 @@ public class MessageBlk implements Serializable {
     private byte[] data;
     private int isValid;
     private int errorCode;
-    private StringId fromWhichBM;
     private StringId blk_sid;
-    public MessageBlk(byte[] data, int isValid, StringId fromWhichBM, StringId blk_sid){
+    public MessageBlk(byte[] data, int isValid, StringId blk_sid){
         this.data = data;
         this.isValid = isValid;
-        this.fromWhichBM = fromWhichBM;
         this.blk_sid = blk_sid;
     }
-    public MessageBlk(int isValid,int errorCode, StringId fromWhichBM){
+    public MessageBlk(int isValid,int errorCode){
         this.isValid = isValid;
         this.errorCode = errorCode;
-        this.fromWhichBM = fromWhichBM;
+    }
+    public MessageBlk(byte[] data, int isValid){
+        this.data = data;
+        this.isValid = isValid;
     }
 
     public byte[] getData() {
@@ -32,10 +33,6 @@ public class MessageBlk implements Serializable {
 
     public int getErrorCode() {
         return errorCode;
-    }
-
-    public StringId getFromWhichBM() {
-        return fromWhichBM;
     }
 
     public StringId getBlk_sid() {

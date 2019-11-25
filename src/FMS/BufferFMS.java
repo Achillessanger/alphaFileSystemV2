@@ -21,7 +21,7 @@ public class BufferFMS {
             inode_cache.add(al);
             for(int j = 0; j < 4; j++){
                 BufferInode bufInode = new BufferInode();
-                bufInode.setInodesId(new StringId("-1"));
+                bufInode.setInodesId(new StringId(""));
                 bufInode.setFileSize(0);
                 bufInode.setBlockSize(0);
                 bufInode.setPreFreeBufInode(tmp);
@@ -45,7 +45,7 @@ public class BufferFMS {
 
     public long inodeHash(Id fileId){
         String name = ((StringId)fileId).getId();
-        if(name.equals("-1"))
+        if(name.equals(""))
             return -1;
         //以下hash策略可以随意修改
         long hash = 0;

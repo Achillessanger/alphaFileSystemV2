@@ -8,7 +8,6 @@ public class BufferBMC {
     public static final int BUFFER_LINES = 4;
     private ArrayList<ArrayList<BufferBlkC>> cache;
     private BufferBlkC freeHead;
-    private ArrayList<BufferBlkC> delyBufBlkCs;
 
     BufferBMC(){
         freeHead = new BufferBlkC();
@@ -28,7 +27,6 @@ public class BufferBMC {
                 tmp = bufferBlkC;
             }
         }
-        delyBufBlkCs = new ArrayList<>();
     }
 
     public static int getBufferLines() {
@@ -43,9 +41,6 @@ public class BufferBMC {
         return freeHead;
     }
 
-    public ArrayList<BufferBlkC> getDelyBufBlkCs() {
-        return delyBufBlkCs;
-    }
 
     public void makeBusy(BufferBlkC blkC, int bufIndex){
         BufferBlkC tmpPre = blkC.getPreFreeBufBlkC();
@@ -79,22 +74,7 @@ public class BufferBMC {
     }
     public BufferBlkC findFreeBlkC(){
         BufferBlkC tmpBlkC = freeHead.getNextFreeBufBlkC();
-        BufferBlkC newBlkC = null;
-        while (tmpBlkC != null){
-            if(tmpBlkC.isDelay()){
-                if(delyBufBlkCs.contains(tmpBlkC))
-                    delyBufBlkCs.add(tmpBlkC);
-            }else {
-                newBlkC = tmpBlkC;
-                break;
-            }
-            tmpBlkC = tmpBlkC.getNextFreeBufBlkC();
-        }
-        return newBlkC;
-    }
-    public void delayWriteFin(BufferBlkC blkC){
-        blkC.setDelay(false);
-        delyBufBlkCs.remove(blkC);
+        return tmpBlkC;
     }
 
 }

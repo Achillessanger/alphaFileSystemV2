@@ -5,6 +5,7 @@ import BMS.ACK;
 import BMS.Ibm.IBlockManager;
 import BMS.MessageBlk;
 import BMS.MessageCheck;
+import FMS.Message;
 import Impl.ErrorCode;
 import Impl.MD5Util;
 import Impl.StringId;
@@ -49,12 +50,13 @@ public class MyBlockManagerClient implements BlockManager {
 //            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_BMSERVER);
         }catch (ErrorCode errorCode){
             bm_server = null;
-            throw errorCode;
+//            throw errorCode;
         }
     }
 
 
     public int reConnect(){
+        System.out.println("trying to reconnect " + name + " server...");
         try {
             bm_server = (IBlockManager) Naming.lookup("rmi://localhost:" + port + "/" + name);
         }catch (NotBoundException | RemoteException | MalformedURLException e){
@@ -68,10 +70,7 @@ public class MyBlockManagerClient implements BlockManager {
     }
 
     public boolean isConnect(){
-        if(bm_server == null)
-            return false;
-        else
-            return true;
+        return (bm_server == null)?false:true;
     }
 
 
@@ -81,7 +80,10 @@ public class MyBlockManagerClient implements BlockManager {
     }
 
     @Override
-    public Block getBlock(Id indexId){
+    public Block getBlock(Id indexId){//OK
+        if(bm_server == null)
+            reConnect();
+
         int blkId = Integer.parseInt(((StringId)indexId).getId());
         int bufIndex =blkId %(BufferBMC.BUFFER_LINES);
 
@@ -92,50 +94,15 @@ public class MyBlockManagerClient implements BlockManager {
             BufferBlkC blkC = buffer.getCache().get(bufIndex).get(i);
             if(Integer.parseInt(blkC.getBlk_sid().getId()) == blkId
                 && !blkC.isBusy()){
-                //在cache里找到了，需要验证远程的版本和cache的版本是否一致
-                //客户端标过delay的块还没有写入服务端，所以不验证
-                //这里只传checksum进行验证
-                if(!blkC.isDelay()){
-                    MessageCheck check_message = new MessageCheck((StringId) indexId, MD5Util.getMD5String(blkC.getData()));
-                    ACK ackReply;
-                    try {
-                        ackReply = bm_server.isBlockChanged(check_message);
-                    }catch (RemoteException e){
-                        throw new ErrorCode(ErrorCode.BM_SERVER_ERROR_IN_CHECKING);
-                    }
-                    //check过程中远程io出错
-                    if(ackReply.getIsValid() == 0 && ackReply.getErrorCode() != ErrorCode.CONTENT_CHANGED_ON_SERVER){
-                        throw new ErrorCode(ErrorCode.BM_SERVER_ERROR_IN_CHECKING);
-                    }
-                    //check过程中发现远程内容被更改过
-                    if(ackReply.getIsValid() == 0 && ackReply.getErrorCode() == ErrorCode.CONTENT_CHANGED_ON_SERVER){
-                        newblkC = blkC;
-                    }else {
-                        //本地缓存与远端一致
-                        return new MyBlock(indexId,this,blkC.getData(),BLOCK_SIZE);
-                    }
-                }else
-                    return new MyBlock(indexId,this,blkC.getData(),BLOCK_SIZE);
+                return new MyBlock(indexId,this,blkC.getData(),BLOCK_SIZE);
+            }
+        }
 
-            }
-        }
-        if(buffer.getDelyBufBlkCs().size() != 0 && newblkC == null){
-            try{
-                delayWrite();
-            }catch (ErrorCode errorCode){
-                throw errorCode;
-            }
-            newblkC = buffer.findFreeBlkC();
-        }
         //从远程读block并放入client自己的缓存
         if(newblkC == null){
             throw new ErrorCode(ErrorCode.OPEN_TOO_MANY_FILES);
         }else {
-            try{
-                delayWrite();
-            }catch (ErrorCode errorCode){
-                throw errorCode;
-            }
+
             buffer.deleteFromCache(newblkC);
             buffer.makeBusy(newblkC,bufIndex);
 
@@ -146,11 +113,11 @@ public class MyBlockManagerClient implements BlockManager {
             }catch (RemoteException e){
                 throw new ErrorCode(ErrorCode.BM_SERVER_CONNECT_FAIL);
             }
-            //远程过程抛出过异常
+            //远程操作过程抛出过异常
             if(retMessage.getIsValid() == 0)
                 throw new ErrorCode(retMessage.getErrorCode());
             //远程过程正常返回
-            //写入缓冲区
+            //写入client缓冲区
             newblkC.setData(retMessage.getData());
             newblkC.setBlk_sid(retMessage.getBlk_sid());
             buffer.makeFree(newblkC);
@@ -160,86 +127,41 @@ public class MyBlockManagerClient implements BlockManager {
     }
 
     @Override
-    public Block newBlock(byte[] b){
-        String idPath = path + "id.count";
-        java.io.File file = new java.io.File(idPath);
-        if(!file.exists()){
-            throw new ErrorCode(ErrorCode.INITFILE_ERROR);
-        }
-        try {
-            RandomAccessFile raf_id = new RandomAccessFile(file,"rw");
-            String str = raf_id.readLine();
-            long newIndex = Long.parseLong(str);
-            int bufCIndex = (int) newIndex % buffer.BUFFER_LINES;
-            BufferBlkC newBlkC = buffer.findFreeBlkC();
+    public Block newBlock(byte[] b){//OK
+        if(bm_server == null)
+            reConnect();
 
-            if(buffer.getDelyBufBlkCs().size() != 0 && newBlkC == null){
-                try{
-                    delayWrite();
-                }catch (ErrorCode errorCode){
-                    throw errorCode;
-                }
-                newBlkC = buffer.findFreeBlkC();
-            }
-            if(newBlkC == null){
-                throw new ErrorCode(ErrorCode.OPEN_TOO_MANY_FILES);
-            }else {
-                try {
-                    delayWrite();
-                }catch (ErrorCode errorCode){
-                    throw errorCode;
-                }
-                buffer.deleteFromCache(newBlkC);
-                newBlkC.setData(b);
-                newBlkC.setDelay(true);
-                StringId newBlkC_sid = new StringId(newIndex + "");
-                newBlkC.setBlk_sid(newBlkC_sid);
-                buffer.makeBusy(newBlkC,bufCIndex);
-                buffer.makeFree(newBlkC);
-
-                newIndex++;
-
-                raf_id.seek(0);
-                raf_id.write((newIndex+"").getBytes());
-                raf_id.close();
-
-                return new MyBlock(newBlkC_sid,this,b,BLOCK_SIZE);
-            }
-        } catch (IOException e){
-            throw new ErrorCode(ErrorCode.IO_EXCEPTION);
-        }
-    }
-
-    private void delayWrite(){
-        ArrayList<BufferBlkC> delay_list = buffer.getDelyBufBlkCs();
-        if(delay_list.size() == 0)
-            return;
-        try {
-            for(BufferBlkC blkC : delay_list){
-                writeBlkC2Server(blkC);
-            }
-        }catch (ErrorCode errorCode){
-            throw errorCode;
-        }
-    }
-    private void writeBlkC2Server(BufferBlkC blkC){
+        MessageBlk writeRequest = new MessageBlk(b,1);
         ACK reply;
-        buffer.makeBusy(blkC,Integer.parseInt(blkC.getBlk_sid().getId())%buffer.BUFFER_LINES);
+        /* write through
+          先向服务器发送写入请求*/
         try {
-            MessageBlk blkC_send_to_server = new MessageBlk(blkC.getData(),1,sid,blkC.getBlk_sid());
-            reply = bm_server.writeBlock(blkC_send_to_server);
+            reply = bm_server.writeBlock(writeRequest);
         }catch (RemoteException e){
             throw new ErrorCode(ErrorCode.BM_SERVER_CONNECT_FAIL);
         }
-
-        //即使远程写入出错了，客户端的这一块也等于写完了，但是其实这块废了
-        buffer.delayWriteFin(blkC);
-        buffer.makeFree(blkC);
-
-        //远程写入出错
-        if(reply.getIsValid() == 0){
+        if(reply.getIsValid() == 0)
             throw new ErrorCode(reply.getErrorCode());
+
+        /*服务器成功将新块写入磁盘与服务器buffer
+          从服务器端返回数据得到服务器端分配的新块号
+          将新块写入客户端buffer*/
+        long newIndex = Long.parseLong(reply.getBlk_id().getId());
+        int bufCIndex = (int) newIndex % buffer.BUFFER_LINES;
+
+        BufferBlkC newBlkC = buffer.findFreeBlkC();
+        if(newBlkC == null){
+            throw new ErrorCode(ErrorCode.OPEN_TOO_MANY_FILES);
+        }else {
+            buffer.deleteFromCache(newBlkC);
+            buffer.makeBusy(newBlkC,bufCIndex);
+            newBlkC.setData(b);
+            newBlkC.setBlk_sid(reply.getBlk_id());
+            buffer.makeFree(newBlkC);
+
+            return new MyBlock(newBlkC.getBlk_sid(),this,b,BLOCK_SIZE);
         }
+
     }
 
     public StringId getSid() {

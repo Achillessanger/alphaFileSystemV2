@@ -24,4 +24,8 @@ public class ACK implements Serializable {
     public int getErrorCode() {
         return errorCode;
     }
+
+    public StringId getBlk_id() {
+        return blk_id;
+    }
 }

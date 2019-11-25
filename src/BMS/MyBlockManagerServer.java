@@ -28,43 +28,29 @@ public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockM
         buffer = new Buffer();
     }
     @Override
-    public MessageBlk readBlock(Id indexId) throws RemoteException {
+    public MessageBlk readBlock(Id indexId) throws RemoteException { //OK
         int blkId = Integer.parseInt(((StringId)indexId).getId());
         int bufIndex = blkId %(Buffer.BUFFER_LINES);
 
         //在cache里找
         for(int i = 0; i < buffer.getCache().get(bufIndex).size(); i++){
-            //！注意这里没有讨论块忙的情况!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            //！注意这里没有讨论块忙的情况!
             BufferBlk blk = buffer.getCache().get(bufIndex).get(i);
             if(Integer.parseInt(blk.getBufBlkId().getId()) == blkId
                     && !blk.isBusy()){
-                return new MessageBlk(blk.getData(),1,BM_sid,blk.getBufBlkId());
+                return new MessageBlk(blk.getData(),1,blk.getBufBlkId());
             }
         }
 
         //从磁盘上读
         //找新缓冲区
         BufferBlk newBlk = buffer.findFreeBlk();
-        if(buffer.getDelyBufBlks().size() != 0 && newBlk == null){
-            try {
-                delayWrite();
-            }catch (ErrorCode errorCode){
-                return new MessageBlk(0,errorCode.getErrorCode(),BM_sid);
-            }
-
-            newBlk = buffer.findFreeBlk();
-        }
 
         if(newBlk == null){
             //空闲缓冲区已空,暂时认为不可能
-            return new MessageBlk(0, ErrorCode.OPEN_TOO_MANY_FILES,BM_sid);
+            return new MessageBlk(0, ErrorCode.OPEN_TOO_MANY_FILES);
 
         }else {
-            try {
-                delayWrite();
-            }catch (ErrorCode errorCode){
-                return new MessageBlk(0,errorCode.getErrorCode(),BM_sid);
-            }
 
             buffer.deleteFromCache(newBlk);
             buffer.makeBusy(newBlk,bufIndex);
@@ -76,7 +62,7 @@ public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockM
             java.io.File metaFile = new java.io.File(metaPath);
             if(!dataFile.exists() || !metaFile.exists()){
                 buffer.makeFree(newBlk);
-                return new MessageBlk(0,ErrorCode.NO_SUCH_BLOCK,BM_sid);
+                return new MessageBlk(0,ErrorCode.NO_SUCH_BLOCK);
             }
             byte[] data;
             String checkSum;
@@ -95,7 +81,7 @@ public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockM
 
             }catch (IOException e){
                 buffer.makeFree(newBlk);
-                return new MessageBlk(0,ErrorCode.IO_EXCEPTION,BM_sid);
+                return new MessageBlk(0,ErrorCode.IO_EXCEPTION);
             }
             //检查磁盘上读的block数据是否正确
             boolean check;
@@ -103,126 +89,90 @@ public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockM
                 check = MD5Util.checkPassword(data,checkSum);
             }catch (ErrorCode errorCode){
                 buffer.makeFree(newBlk);
-                return new MessageBlk(0,errorCode.getErrorCode(),BM_sid);
+                return new MessageBlk(0,errorCode.getErrorCode());
             }
             if(check) {
+                //写入buffer
                 newBlk.setData(data);
                 newBlk.setBufBlkId((StringId)indexId);
                 buffer.makeFree(newBlk);
-                return new MessageBlk(data,1,BM_sid,(StringId)indexId);
+                return new MessageBlk(data,1,(StringId)indexId);
             } else {
                 buffer.makeFree(newBlk);
-                return new MessageBlk(0,ErrorCode.CHECKSUM_CHECK_FAILED,BM_sid);
+                return new MessageBlk(0,ErrorCode.CHECKSUM_CHECK_FAILED);
             }
         }
 
     }
 
     @Override
-    public ACK writeBlock(MessageBlk message) throws RemoteException {
+    public ACK writeBlock(MessageBlk message) throws RemoteException { //OK
+//        try {
+//            Thread.sleep(10000);
+//        }catch (InterruptedException e){
+//
+//        }
+
         byte[] b = message.getData();
-        long newIndex = Long.parseLong(message.getBlk_sid().getId());
-
-        int bufIndex = (int) newIndex % (buffer.BUFFER_LINES);
-        BufferBlk newBlk = buffer.findFreeBlk();
-
-        if(buffer.getDelyBufBlks().size() != 0 && newBlk == null){
-            try {
-                delayWrite();
-            }catch (ErrorCode errorCode){
-                return new ACK(0,errorCode.getErrorCode());
-            }
-            newBlk = buffer.findFreeBlk();
+        String idPath = path + "id.count";
+        java.io.File file = new java.io.File(idPath);
+        if(!file.exists()){
+            return new ACK(0,ErrorCode.INITFILE_ERROR);
         }
-        if (newBlk == null) {
-            //空闲缓冲区已空,暂时认为不可能
-            return new ACK(0,ErrorCode.OPEN_TOO_MANY_FILES);
-        } else {
-            try {
-                delayWrite();
-            }catch (ErrorCode errorCode){
-                return new ACK(0,errorCode.getErrorCode());
-            }
-            buffer.deleteFromCache(newBlk);
-            newBlk.setData(b);
-            newBlk.setDelay(true);
-            StringId sid = new StringId(newIndex + "");
-            newBlk.setBufBlkId(sid);
-            buffer.makeBusy(newBlk, bufIndex);
-            buffer.makeFree(newBlk);
-
-
-            //服务器端写入缓冲成功，发送ACK
-            return new ACK(1,sid);
-        }
-
-    }
-
-    @Override
-    public ACK isBlockChanged(MessageCheck checkFromClient) throws RemoteException {
-        StringId check_blk_Id = checkFromClient.getBlkId();
-        MessageBlk readResult = readBlock(check_blk_Id);
-        if(readResult.getIsValid() == 0){
-            return new ACK(0,readResult.getErrorCode());
-        }else {
-            boolean check = MD5Util.checkPassword(readResult.getData(),checkFromClient.getChecksum());
-            if(check)
-                return new ACK(1,check_blk_Id);
-            else
-                return new ACK(0,ErrorCode.CONTENT_CHANGED_ON_SERVER);
-        }
-    }
-
-    @Override
-    public long getBlockSize() throws RemoteException {
-        return BLOCK_SIZE;
-    }
-
-
-    private void delayWrite(){
-        ArrayList<BufferBlk> delyBufBlks = buffer.getDelyBufBlks();
-        if(delyBufBlks.size() == 0)
-            return;
-
         try {
-            for(BufferBlk blk : delyBufBlks){
-                writeBlk2file(blk);
+            RandomAccessFile raf_id = new RandomAccessFile(file,"rw");
+            String str = raf_id.readLine();
+            long newIndex = Long.parseLong(str);
+            int bufIndex = (int) newIndex % buffer.BUFFER_LINES;
+
+            BufferBlk newBlk = buffer.findFreeBlk();
+            if (newBlk == null) {
+                //空闲缓冲区已空,暂时认为不可能
+                return new ACK(0,ErrorCode.OPEN_TOO_MANY_FILES);
+            } else {
+                //写入磁盘
+                String dataPath = path + newIndex + ".data";
+                String metaPath = path + newIndex + ".meta";
+                java.io.File dataFile = new java.io.File(dataPath);
+                java.io.File metaFile = new java.io.File(metaPath);
+                if(dataFile.exists() || metaFile.exists())
+                    return new ACK(0,ErrorCode.INITFILE_ERROR);
+
+                dataFile.createNewFile();
+                metaFile.createNewFile();
+
+                RandomAccessFile raf_data = new RandomAccessFile(dataFile,"rw");
+                raf_data.seek(0);
+                raf_data.write(b);
+                raf_data.close();
+
+                RandomAccessFile raf_meta = new RandomAccessFile(metaFile,"rw");
+                String md5 = MD5Util.getMD5String(b);
+                String str_meta = "size:" + b.length + "\nchecksum:" + md5 + "\n";
+                raf_meta.seek(0);
+                raf_meta.write(str_meta.getBytes());
+                raf_meta.close();
+
+                long futureIndex = newIndex + 1;
+                raf_id.seek(0);
+                raf_id.write((futureIndex+"").getBytes());
+                raf_id.close();
+
+                /*已经写入磁盘成功
+                  准备存入服务器端buffer，这个顺序是为了一致性*/
+                buffer.deleteFromCache(newBlk);
+                buffer.makeBusy(newBlk, bufIndex);
+                newBlk.setData(b);
+                StringId sid = new StringId(newIndex + "");
+                newBlk.setBufBlkId(sid);
+                buffer.makeFree(newBlk);
+
+                //服务器端写入缓冲成功，发送ACK,告知客户端新分配的块号
+                return new ACK(1,sid);
             }
-        }catch (ErrorCode errorCode){
-            throw errorCode;
-        }
-    }
-    public void writeBlk2file(BufferBlk blk){
-        String dataPath = path + blk.getBufBlkId().getId() + ".data";
-        String metaPath = path + blk.getBufBlkId().getId() + ".meta";
-        java.io.File dataFile = new java.io.File(dataPath);
-        java.io.File metaFile = new java.io.File(metaPath);
-
-
-        try {
-            dataFile.createNewFile();
-            metaFile.createNewFile();
-            int bufIndex = Integer.parseInt(blk.getBufBlkId().getId()) % (buffer.BUFFER_LINES);
-            buffer.makeBusy(blk, bufIndex);
-
-            RandomAccessFile raf_data = new RandomAccessFile(dataFile,"rw");
-            raf_data.write(blk.getData());
-            raf_data.close();
-
-            RandomAccessFile raf_meta = new RandomAccessFile(metaFile,"rw");
-            String md5 = MD5Util.getMD5String(blk.getData());
-            String str_meta = "size:" + blk.getData().length + "\nchecksum:" + md5 + "\n";
-            raf_meta.write(str_meta.getBytes());
-            raf_meta.close();
-
-            //delay块write back成功，重置delay位并从list里清除
-            buffer.delayWriteFin(blk);
-
-            buffer.makeFree(blk);
 
         }catch (IOException e){
-            throw new ErrorCode(ErrorCode.IO_EXCEPTION);
+            return new ACK(0,ErrorCode.IO_EXCEPTION);
         }
-
     }
 }

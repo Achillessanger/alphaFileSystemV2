@@ -5,6 +5,7 @@ import FMS.Ifm.IFileManager;
 import FMS.Message;
 import Impl.ErrorCode;
 import Impl.StringId;
+import Impl.mContext;
 import interfaces.File;
 import interfaces.FileManager;
 import interfaces.Id;
@@ -40,7 +41,6 @@ public class MyFileManagerClient implements FileManager {
             fm_server = (IFileManager)Naming.lookup("rmi://localhost:" + port + "/" + name);
         }catch (NotBoundException | RemoteException | MalformedURLException e){
             fm_server = null;
-            e.printStackTrace(); //TODO
 //            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_FMSERVER);
         }catch (ErrorCode errorCode){
             fm_server = null;
@@ -49,12 +49,11 @@ public class MyFileManagerClient implements FileManager {
     }
 
     public int reConnect(){
-        System.out.println("reconnecting...");
+        System.out.println("trying to reconnect " + name + " server...");
         try {
             fm_server = (IFileManager)Naming.lookup("rmi://localhost:" + port + "/" + name);
         }catch (NotBoundException | RemoteException | MalformedURLException e){
             fm_server = null;
-            e.printStackTrace(); //TODO
             return 0;
         }catch (ErrorCode errorCode){
             fm_server = null;
@@ -71,6 +70,9 @@ public class MyFileManagerClient implements FileManager {
 
     @Override
     public File getFile(Id fileId){
+        if(fm_server == null)
+            reConnect();
+
         retMessage = null;
 
         try {
@@ -90,22 +92,29 @@ public class MyFileManagerClient implements FileManager {
 
     @Override
     public File newFile(Id fileId){
+        if(fm_server == null)
+            reConnect();
+
         retMessage = null;
 
         try {
             retMessage = fm_server.newFileMeta(fileId);
         }catch (RemoteException e){
-            e.printStackTrace();//TODO
             throw new ErrorCode(ErrorCode.FM_SERVER_CONNECT_FAIL);
         }
 
         if(retMessage.getIsValid() == 0)
             throw new ErrorCode(retMessage.getErrorCode());
-        File myFile = new MyFile(fileId,this,name,0,retMessage.getBlockSize(),retMessage.getLogicBlockList());
+        ArrayList<Map<Id, Id>> LogicBlockList_new = new ArrayList<>();
+        LogicBlockList_new.add(mContext.fileEmpytMap);
+        File myFile = new MyFile(fileId,this,name,0,retMessage.getBlockSize(),LogicBlockList_new);
         return myFile;
     }
 
-    public void updateInode(File newfile){//TODO 回滚
+    public void updateInode(File newfile){
+        if(fm_server == null)
+            reConnect();
+
         FMACK fmack;
         Message message = new Message(((MyFile) newfile).getLogicBlockList(),1,((MyFile) newfile).getFileSize(),((MyFile) newfile).getBlockSize());
         try {
