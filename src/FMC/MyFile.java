@@ -273,9 +273,9 @@ public class MyFile implements File{
                     break;
                 }else {
                     MyBlockManagerClient bm = mContext.myBlockManagerClientMap.get(entry.getKey());
-                    //如果bmserver没有上线/又下线了
-                    if(bm.checkConnect() == 0)
-                        continue;
+//                    //如果bmserver没有上线/又下线了
+//                    if(bm.checkConnect() == 0)
+//                        continue;
                     try {
                         Block block = bm.getBlock(entry.getValue());
                         blockData = block.read();

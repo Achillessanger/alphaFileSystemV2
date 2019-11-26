@@ -88,9 +88,6 @@ public class MyBlockManagerClient implements BlockManager {
 
     @Override
     public Block getBlock(Id indexId){//OK
-        if(checkConnect() == 0)
-            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_BMSERVER);
-
         int blkId = Integer.parseInt(((StringId)indexId).getId());
         int bufIndex =blkId %(BufferBMC.BUFFER_LINES);
 
@@ -104,6 +101,9 @@ public class MyBlockManagerClient implements BlockManager {
                 return new MyBlock(indexId,this,blkC.getData(),BLOCK_SIZE);
             }
         }
+
+        if(checkConnect() == 0)
+            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_BMSERVER);
 
         //从远程读block并放入client自己的缓存
         if(newblkC == null){
