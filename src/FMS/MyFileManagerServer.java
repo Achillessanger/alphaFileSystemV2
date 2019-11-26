@@ -1,11 +1,10 @@
 package FMS;
 
 import FMS.Ifm.IFileManager;
-import FMC.MyFile;
+import interfaces.IPing;
 import Impl.ErrorCode;
 import Impl.StringId;
 import Impl.mContext;
-import interfaces.File;
 import interfaces.Id;
 
 import java.io.*;
@@ -15,7 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MyFileManagerServer extends UnicastRemoteObject implements IFileManager {
+public class MyFileManagerServer extends UnicastRemoteObject implements IFileManager, IPing {
     private final long BLOCK_SIZE = 512;
     private String path;
     private BufferFMS fmBuffer;
@@ -204,4 +203,11 @@ public class MyFileManagerServer extends UnicastRemoteObject implements IFileMan
         }
         return new Message(newInode.getInode_data(),1,0,newInode.getBlockSize());
     }
+
+    @Override
+    public String ping() throws RemoteException {
+        System.out.println("log:From FM server("+ path+"):pong");
+        return null;
+    }
+
 }

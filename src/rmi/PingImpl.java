@@ -3,7 +3,7 @@ package rmi;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
-public class PingImpl extends UnicastRemoteObject implements IPing {
+public class PingImpl extends UnicastRemoteObject implements IPing_ {
 
     public PingImpl() throws RemoteException {
         super();

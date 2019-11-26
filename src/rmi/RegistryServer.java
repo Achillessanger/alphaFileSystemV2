@@ -13,7 +13,7 @@ public class RegistryServer {
         // 创建一个 ping 对象,
         // PingImpl 继承了 UnicastRemoteObject,
         // 这个继承让 ping 在创建过程中就被发布到网络中了
-        IPing ping = new PingImpl();
+        IPing_ ping = new PingImpl();
 
         // 把 ping 对象绑定到 registry 上;
         // 下面解释一下 URL 的含义:

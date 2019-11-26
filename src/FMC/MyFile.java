@@ -15,6 +15,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class MyFile implements File{
+    private int startNum = 0;
+
     private long fileSize;
     private long blockSize;
     private String fmName;
@@ -30,6 +32,7 @@ public class MyFile implements File{
         this.fmName = fmName;
         this.fileManager = fileManager;
 
+        startNum = (int)(Math.random()*3);
     }
 
     public Id getFileId(){
@@ -261,39 +264,36 @@ public class MyFile implements File{
 
     private byte[] chooseDuplication(Map<Id, Id> map){
         byte[] blockData = null;
-
-        for(Map.Entry<Id,Id> entry : map.entrySet()){
-            if(entry.getKey().equals(new StringId("FILE_EMPTY"))){
-                blockData = new byte[(int)blockSize];
-                break;
-            }else {
-                MyBlockManagerClient bm = mContext.myBlockManagerClientMap.get(entry.getKey());
-                //如果bmserver之前没有上线，再次重连试试
-                if(!bm.isConnect()){
-                    if(bm.reConnect() == 0)
-                        continue;
-                }
-                try {
-                    Block block = bm.getBlock(entry.getValue());
-                    blockData = block.read();
+        if(map == null){
+            blockData = new byte[(int)blockSize];
+        }else {
+            for(Map.Entry<Id,Id> entry : map.entrySet()){
+                if(entry.getKey().equals(new StringId("FILE_EMPTY"))){
+                    blockData = new byte[(int)blockSize];
                     break;
-                }catch (ErrorCode errorCode){
-                    continue;
+                }else {
+                    MyBlockManagerClient bm = mContext.myBlockManagerClientMap.get(entry.getKey());
+                    //如果bmserver没有上线/又下线了
+                    if(bm.checkConnect() == 0)
+                        continue;
+                    try {
+                        Block block = bm.getBlock(entry.getValue());
+                        blockData = block.read();
+                        break;
+                    }catch (ErrorCode errorCode){
+                        continue;
+                    }
                 }
             }
         }
+
         if(blockData == null)
             throw new ErrorCode(ErrorCode.MEMORY_ERROR);
         else
             return blockData;
     }
 
-    /**
-     * bm amount should not larger than 9
-     * @param b
-     * @return
-     */
-    private int startNum = 0;
+
     private Map<Id, Id> writeDuplication(byte[] b){
         Map<Id, Id> ret = new HashMap<>();
         boolean isEmpty1 = true;
@@ -314,10 +314,7 @@ public class MyFile implements File{
                     count++;
                     avaliableBMC.add(entry.getValue());
                 }else {
-                    if(entry.getValue().reConnect() == 1) {
-                        count++;
-                        avaliableBMC.add(entry.getValue());
-                    }
+
                 }
             }
             if(count == 0){
@@ -327,8 +324,9 @@ public class MyFile implements File{
             dupliaction_number = (count < dupliaction_number)?count:dupliaction_number;
 
             for(int i = 0; i < dupliaction_number; i++){
-                Block block = writeBlock(avaliableBMC.get((startNum+i)%(avaliableBMC.size())),b);
-                ret.put(avaliableBMC.get((startNum+i)%3).getSid(),block.getIndexId());
+                int index = (startNum+i)%(avaliableBMC.size());
+                Block block = writeBlock(avaliableBMC.get(index),b);
+                ret.put(avaliableBMC.get(index).getSid(),block.getIndexId());
             }
             startNum = (startNum + 1)%3;
 

@@ -5,6 +5,7 @@ import Impl.ErrorCode;
 import Impl.MD5Util;
 import Impl.StringId;
 import Impl.mContext;
+import interfaces.IPing;
 import interfaces.Id;
 
 import java.io.*;
@@ -12,7 +13,7 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 
-public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockManager {
+public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockManager, IPing {
     private final long BLOCK_SIZE = 512;
     private String path;
     private String name;
@@ -174,5 +175,11 @@ public class MyBlockManagerServer extends UnicastRemoteObject implements IBlockM
         }catch (IOException e){
             return new ACK(0,ErrorCode.IO_EXCEPTION);
         }
+    }
+
+    @Override
+    public String ping() throws RemoteException {
+        System.out.println("log:From BM server("+ name +"):pong");
+        return null;
     }
 }

@@ -8,6 +8,7 @@ import Impl.StringId;
 import Impl.mContext;
 import interfaces.File;
 import interfaces.FileManager;
+import interfaces.IPing;
 import interfaces.Id;
 
 import java.io.BufferedReader;
@@ -53,12 +54,15 @@ public class MyFileManagerClient implements FileManager {
         try {
             fm_server = (IFileManager)Naming.lookup("rmi://localhost:" + port + "/" + name);
         }catch (NotBoundException | RemoteException | MalformedURLException e){
+            System.out.println("cannot connect to "+ name + " server...");
             fm_server = null;
             return 0;
         }catch (ErrorCode errorCode){
+            System.out.println("cannot connect to "+ name + " server...");
             fm_server = null;
             return 0;
         }
+        System.out.println("connected to "+ name + " server...");
         return 1;
     }
     public boolean isConnect(){
@@ -70,8 +74,8 @@ public class MyFileManagerClient implements FileManager {
 
     @Override
     public File getFile(Id fileId){
-        if(fm_server == null)
-            reConnect();
+        if(checkConnect() == 0)
+            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_FMSERVER);
 
         retMessage = null;
 
@@ -92,8 +96,8 @@ public class MyFileManagerClient implements FileManager {
 
     @Override
     public File newFile(Id fileId){
-        if(fm_server == null)
-            reConnect();
+        if(checkConnect() == 0)
+            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_FMSERVER);
 
         retMessage = null;
 
@@ -112,8 +116,8 @@ public class MyFileManagerClient implements FileManager {
     }
 
     public void updateInode(File newfile){
-        if(fm_server == null)
-            reConnect();
+        if(checkConnect() == 0)
+            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_FMSERVER);
 
         FMACK fmack;
         Message message = new Message(((MyFile) newfile).getLogicBlockList(),1,((MyFile) newfile).getFileSize(),((MyFile) newfile).getBlockSize());
@@ -125,5 +129,18 @@ public class MyFileManagerClient implements FileManager {
         if(fmack.getIsValid() == 0){
             throw new ErrorCode(retMessage.getErrorCode());
         }
+    }
+
+    public int checkConnect(){
+        try {
+            if(fm_server != null)
+                ((IPing)fm_server).ping();
+            else
+                return reConnect();
+        }catch (RemoteException e){
+            fm_server = null;
+            return reConnect();
+        }
+        return 1;
     }
 }

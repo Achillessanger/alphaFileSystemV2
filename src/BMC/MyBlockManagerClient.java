@@ -11,6 +11,7 @@ import Impl.MD5Util;
 import Impl.StringId;
 import interfaces.Block;
 import interfaces.BlockManager;
+import interfaces.IPing;
 import interfaces.Id;
 
 import java.io.*;
@@ -60,17 +61,23 @@ public class MyBlockManagerClient implements BlockManager {
         try {
             bm_server = (IBlockManager) Naming.lookup("rmi://localhost:" + port + "/" + name);
         }catch (NotBoundException | RemoteException | MalformedURLException e){
+            System.out.println("cannot connect to "+ name + " server...");
             bm_server = null;
             return 0;
         }catch (ErrorCode errorCode){
+            System.out.println("cannot connect to "+ name + " server...");
             bm_server = null;
             return 0;
         }
+        System.out.println("connected to "+ name + " server...");
         return 1;
     }
 
     public boolean isConnect(){
-        return (bm_server == null)?false:true;
+        if(checkConnect() == 1)
+            return true;
+        else
+            return false;
     }
 
 
@@ -81,8 +88,8 @@ public class MyBlockManagerClient implements BlockManager {
 
     @Override
     public Block getBlock(Id indexId){//OK
-        if(bm_server == null)
-            reConnect();
+        if(checkConnect() == 0)
+            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_BMSERVER);
 
         int blkId = Integer.parseInt(((StringId)indexId).getId());
         int bufIndex =blkId %(BufferBMC.BUFFER_LINES);
@@ -128,8 +135,9 @@ public class MyBlockManagerClient implements BlockManager {
 
     @Override
     public Block newBlock(byte[] b){//OK
-        if(bm_server == null)
-            reConnect();
+        if(checkConnect() == 0)
+            throw new ErrorCode(ErrorCode.CANNOT_CONNECT_TO_BMSERVER);
+
 
         MessageBlk writeRequest = new MessageBlk(b,1);
         ACK reply;
@@ -166,5 +174,18 @@ public class MyBlockManagerClient implements BlockManager {
 
     public StringId getSid() {
         return sid;
+    }
+
+    public int checkConnect(){
+        try {
+            if(bm_server != null)
+                ((IPing)bm_server).ping();
+            else
+                return reConnect();
+        }catch (RemoteException e){
+            bm_server = null;
+            return reConnect();
+        }
+        return 1;
     }
 }
